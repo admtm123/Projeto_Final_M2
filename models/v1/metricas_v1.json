@@ -1,0 +1,46 @@
+{
+  "versao": "v1",
+  "modelo_salvo": "Gradient Boosting",
+  "data_treinamento": "2026-07-16",
+  "treinado_com": "100% da base (treino + teste) - retreino final feito na Fase 6a, após a avaliação honesta da Fase 5",
+  "features_utilizadas": [
+    "bedrooms",
+    "bathrooms",
+    "sqft_living",
+    "sqft_lot",
+    "floors",
+    "waterfront",
+    "view",
+    "condition",
+    "grade",
+    "sqft_basement",
+    "idade_imovel",
+    "foi_reformado",
+    "lat",
+    "long",
+    "zipcode_faixa_faixa_1",
+    "zipcode_faixa_faixa_2",
+    "zipcode_faixa_faixa_3",
+    "zipcode_faixa_faixa_4",
+    "zipcode_faixa_faixa_5",
+    "zipcode_faixa_faixa_6",
+    "zipcode_faixa_faixa_7",
+    "zipcode_faixa_faixa_8",
+    "zipcode_faixa_faixa_9"
+  ],
+  "scaler": "StandardScaler reajustado com 100% da base para o modelo final salvo (scaler_final da Fase 6a). As métricas abaixo, porém, vêm do modelo avaliado apenas no split 80/20 (Fase 5), pois é a única forma honesta de estimar o erro do modelo em dados nunca vistos.",
+  "metricas_modelo_salvo": {
+    "treino": {
+      "MAE": 104550.9694919752,
+      "MSE": 30302296089.050247,
+      "RMSE": 174075.5470738215,
+      "R2": 0.768062628307028
+    },
+    "teste": {
+      "MAE": 77466.7491068379,
+      "MSE": 20283292615.644783,
+      "RMSE": 142419.4249940814,
+      "R2": 0.8658305746113695
+    }
+  }
+}

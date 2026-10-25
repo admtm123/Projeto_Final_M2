@@ -1,0 +1,13 @@
+# Bibliotecas principais
+numpy
+pandas
+scikit-learn
+tensorflow
+
+# Visualização e processamento de imagem
+matplotlib
+Pillow
+
+# Ambiente de notebook
+jupyter
+
