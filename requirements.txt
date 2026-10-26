@@ -11,3 +11,7 @@ Pillow
 # Ambiente de notebook
 jupyter
 
+# API modular
+fastapi
+pydantic>=2.0
+uvicorn[standard]
