@@ -5,8 +5,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from api.exception_handlers import register_exception_handlers
 from api.routers import router
-from api.schemas import PredictionRequest, PredictionResponse
+from api.schemas import HealthResponse, PredictionRequest, PredictionResponse
 
 
 def _valid_payload():
@@ -29,9 +30,39 @@ def _valid_payload():
 
 class PredictionRouterTests(unittest.TestCase):
     def setUp(self):
-        app = FastAPI()
-        app.include_router(router)
-        self.client = TestClient(app)
+        self.app = FastAPI()
+        register_exception_handlers(self.app)
+        self.app.include_router(router)
+        self.client = TestClient(self.app)
+
+    def test_health_returns_200_with_loaded_model_state(self):
+        health = HealthResponse(
+            status="ok",
+            service_active=True,
+            model_loaded=True,
+            scaler_loaded=True,
+        )
+
+        with patch("api.routers.get_health_status", return_value=health):
+            response = self.client.get("/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), health.model_dump())
+
+    def test_health_returns_200_when_model_is_not_loaded(self):
+        health = HealthResponse(
+            status="degraded",
+            service_active=True,
+            model_loaded=False,
+            scaler_loaded=False,
+        )
+
+        with patch("api.routers.get_health_status", return_value=health):
+            response = self.client.get("/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["service_active"])
+        self.assertFalse(response.json()["model_loaded"])
 
     def test_predict_returns_the_service_response(self):
         payload = _valid_payload()
@@ -75,6 +106,31 @@ class PredictionRouterTests(unittest.TestCase):
                 payload[field] = value
                 response = self.client.post("/predict", json=payload)
                 self.assertEqual(response.status_code, 422)
+
+    def test_predict_returns_400_for_malformed_json(self):
+        response = self.client.post(
+            "/predict",
+            content='{"bedrooms":',
+            headers={"content-type": "application/json"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("malformado", response.json()["detail"])
+
+    def test_predict_returns_sanitized_500_for_inference_failure(self):
+        with patch(
+            "api.routers.predict_price",
+            side_effect=RuntimeError("internal model details"),
+        ), self.assertLogs("api.exception_handlers", level="ERROR"):
+            client = TestClient(self.app, raise_server_exceptions=False)
+            response = client.post("/predict", json=_valid_payload())
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Erro interno ao processar a requisição."},
+        )
+        self.assertNotIn("internal model details", response.text)
 
     def test_response_schema_rejects_invalid_output(self):
         for invalid_response in (

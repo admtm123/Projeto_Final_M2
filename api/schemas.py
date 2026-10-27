@@ -1,6 +1,6 @@
 """Contratos validados de entrada e saída da API imobiliária."""
 
-from typing import Annotated, Union
+from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt
 
@@ -75,3 +75,16 @@ class PredictionResponse(BaseModel):
         max_length=20,
         description="Identificador da versão do modelo.",
     )
+
+
+class HealthResponse(BaseModel):
+    """Estado operacional da API e presença dos artefatos na memória."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    status: Literal["ok", "degraded"] = Field(
+        description="Estado geral; degraded indica ausência de artefato em memória."
+    )
+    service_active: bool = Field(description="Indica que a API respondeu à checagem.")
+    model_loaded: bool = Field(description="Indica que o modelo está disponível em RAM.")
+    scaler_loaded: bool = Field(description="Indica que o scaler está disponível em RAM.")

@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from api.exception_handlers import register_exception_handlers
 from api.routers import router
 from api.services import clear_model_cache, initialize_model
 
@@ -26,4 +27,5 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+register_exception_handlers(app)
 app.include_router(router)

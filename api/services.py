@@ -9,7 +9,7 @@ from typing import Any
 import joblib
 import pandas as pd
 
-from api.schemas import PredictionRequest, PredictionResponse
+from api.schemas import HealthResponse, PredictionRequest, PredictionResponse
 
 
 MODEL_DIR = Path(__file__).resolve().parents[1] / "models" / "v1"
@@ -111,6 +111,25 @@ def predict_price(request: PredictionRequest) -> PredictionResponse:
     return PredictionResponse(
         preco_estimado=estimated_price,
         versao_modelo=artifacts.version,
+    )
+
+
+def get_health_status() -> HealthResponse:
+    """Verifica apenas as referências em memória; não acessa arquivos do modelo."""
+    artifacts = _artifacts
+    model_loaded = artifacts is not None and callable(
+        getattr(artifacts.model, "predict", None)
+    )
+    scaler_loaded = artifacts is not None and callable(
+        getattr(artifacts.scaler, "transform", None)
+    )
+
+    # O endpoint foi alcançado, então a API está ativa; status distingue artefatos ausentes.
+    return HealthResponse(
+        status="ok" if model_loaded and scaler_loaded else "degraded",
+        service_active=True,
+        model_loaded=model_loaded,
+        scaler_loaded=scaler_loaded,
     )
 
 

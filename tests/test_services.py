@@ -6,6 +6,7 @@ import numpy as np
 from api.schemas import PredictionRequest
 from api.services import (
     clear_model_cache,
+    get_health_status,
     initialize_model,
     predict_price,
 )
@@ -86,6 +87,14 @@ class PredictPriceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "lifespan do FastAPI"):
             predict_price(PredictionRequest(**_valid_payload()))
         self.joblib_load.assert_not_called()
+
+    def test_health_reports_artifact_residency_without_reloading(self):
+        health = get_health_status()
+        self.assertEqual(health.status, "ok")
+        self.assertTrue(health.service_active)
+        self.assertTrue(health.model_loaded)
+        self.assertTrue(health.scaler_loaded)
+        self.assertEqual(self.joblib_load.call_count, 2)
 
 
 if __name__ == "__main__":
