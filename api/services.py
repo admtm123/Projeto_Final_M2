@@ -2,7 +2,7 @@
 
 import json
 import math
-from functools import lru_cache
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +18,21 @@ SCALER_FILE = MODEL_DIR / "scaler_gradientBoosting_v1.pkl"
 METRICS_FILE = MODEL_DIR / "metricas_v1.json"
 
 
-@lru_cache(maxsize=1)
-def _load_artifacts() -> tuple[Any, Any, list[str], str]:
-    """Carrega e valida uma vez os artefatos usados pelas previsões."""
+@dataclass(frozen=True)
+class ModelArtifacts:
+    """Artefatos mantidos em memória enquanto a aplicação está ativa."""
+
+    model: Any
+    scaler: Any
+    features: list[str]
+    version: str
+
+
+_artifacts: ModelArtifacts | None = None
+
+
+def _load_artifacts() -> ModelArtifacts:
+    """Lê do disco e valida os artefatos durante o startup da aplicação."""
     with METRICS_FILE.open(encoding="utf-8") as metrics_file:
         metadata = json.load(metrics_file)
 
@@ -65,18 +77,29 @@ def _load_artifacts() -> tuple[Any, Any, list[str], str]:
     if not isinstance(version, str) or not version:
         raise ValueError(f"Versão inválida em {METRICS_FILE}.")
 
-    return model, scaler, features, version
+    return ModelArtifacts(
+        model=model,
+        scaler=scaler,
+        features=features,
+        version=version,
+    )
 
 
 def predict_price(request: PredictionRequest) -> PredictionResponse:
-    """Aplica o scaler e retorna a previsão do preço do imóvel."""
-    model, scaler, features, version = _load_artifacts()
+    """Infere usando somente os artefatos já carregados na memória."""
+    artifacts = _artifacts
+    if artifacts is None:
+        raise RuntimeError(
+            "Os artefatos do modelo não foram inicializados. "
+            "A aplicação deve iniciar pelo lifespan do FastAPI."
+        )
+
     input_frame = pd.DataFrame(
         [request.model_dump()],
-        columns=features,
+        columns=artifacts.features,
     )
-    scaled_features = scaler.transform(input_frame)
-    prediction = model.predict(scaled_features)
+    scaled_features = artifacts.scaler.transform(input_frame)
+    prediction = artifacts.model.predict(scaled_features)
 
     if len(prediction) != 1:
         raise ValueError("O modelo deveria retornar exatamente uma previsão.")
@@ -87,15 +110,18 @@ def predict_price(request: PredictionRequest) -> PredictionResponse:
 
     return PredictionResponse(
         preco_estimado=estimated_price,
-        versao_modelo=version,
+        versao_modelo=artifacts.version,
     )
 
 
 def initialize_model() -> None:
-    """Carrega e valida os artefatos durante a inicialização da aplicação."""
-    _load_artifacts()
+    """Carrega os artefatos uma vez, antes de a aplicação aceitar requisições."""
+    global _artifacts
+    if _artifacts is None:
+        _artifacts = _load_artifacts()
 
 
 def clear_model_cache() -> None:
-    """Libera as referências aos artefatos quando a aplicação é encerrada."""
-    _load_artifacts.cache_clear()
+    """Libera as referências em memória quando a aplicação é encerrada."""
+    global _artifacts
+    _artifacts = None

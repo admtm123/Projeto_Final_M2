@@ -16,4 +16,5 @@ router = APIRouter(tags=["Previsões"])
 )
 def create_prediction(request: PredictionRequest) -> PredictionResponse:
     """Valida os dados recebidos e solicita a previsão ao serviço."""
+    # O serviço usa os artefatos carregados no startup; a rota não acessa o disco.
     return predict_price(request)

@@ -4,7 +4,11 @@ from unittest.mock import patch
 import numpy as np
 
 from api.schemas import PredictionRequest
-from api.services import _load_artifacts, predict_price
+from api.services import (
+    clear_model_cache,
+    initialize_model,
+    predict_price,
+)
 
 
 class _FakeScaler:
@@ -26,7 +30,7 @@ class _FakeModel:
 
 class PredictPriceTests(unittest.TestCase):
     def setUp(self):
-        _load_artifacts.cache_clear()
+        clear_model_cache()
         self.scaler = _FakeScaler()
         self.model = _FakeModel()
         self.artifacts = iter((self.model, self.scaler))
@@ -34,11 +38,12 @@ class PredictPriceTests(unittest.TestCase):
             "api.services.joblib.load",
             side_effect=lambda _path: next(self.artifacts),
         )
-        self.loader.start()
+        self.joblib_load = self.loader.start()
+        initialize_model()
 
     def tearDown(self):
         self.loader.stop()
-        _load_artifacts.cache_clear()
+        clear_model_cache()
 
     def test_prediction_uses_metadata_feature_order_and_scaler(self):
         payload = {
@@ -55,6 +60,19 @@ class PredictPriceTests(unittest.TestCase):
             list(PredictionRequest.model_fields),
         )
         self.assertEqual(self.model.values.shape, (1, 23))
+        predict_price(PredictionRequest(**payload))
+        self.assertEqual(self.joblib_load.call_count, 2)
+        initialize_model()
+        self.assertEqual(self.joblib_load.call_count, 2)
+
+    def test_prediction_before_initialization_does_not_read_artifacts(self):
+        clear_model_cache()
+        self.joblib_load.reset_mock()
+        with self.assertRaisesRegex(RuntimeError, "lifespan do FastAPI"):
+            predict_price(PredictionRequest(**{
+                name: 1 for name in PredictionRequest.model_fields
+            }))
+        self.joblib_load.assert_not_called()
 
 
 if __name__ == "__main__":
