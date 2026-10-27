@@ -11,11 +11,13 @@ from api.services import clear_model_cache, initialize_model
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """Inicializa os artefatos do modelo e limpa o cache ao encerrar."""
+    """Carrega os artefatos antes das requisições e libera-os ao encerrar."""
     try:
+        # Carrega o modelo e o scaler em memória antes de aceitar requisições.
         initialize_model()
         yield
     finally:
+        # Descarta as referências em memória mesmo se o app encerrar com erro.
         clear_model_cache()
 
 
