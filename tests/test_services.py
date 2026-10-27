@@ -11,6 +11,24 @@ from api.services import (
 )
 
 
+def _valid_payload():
+    payload = {name: 0 for name in PredictionRequest.model_fields}
+    payload.update(
+        bedrooms=3,
+        bathrooms=2.5,
+        sqft_living=1_500,
+        sqft_lot=5_000,
+        floors=1.5,
+        condition=3,
+        grade=7,
+        idade_imovel=50,
+        lat=47.5,
+        long=-122.2,
+        zipcode_faixa_faixa_1=1,
+    )
+    return payload
+
+
 class _FakeScaler:
     n_features_in_ = len(PredictionRequest.model_fields)
     feature_names_in_ = np.array(list(PredictionRequest.model_fields))
@@ -46,10 +64,7 @@ class PredictPriceTests(unittest.TestCase):
         clear_model_cache()
 
     def test_prediction_uses_metadata_feature_order_and_scaler(self):
-        payload = {
-            name: index
-            for index, name in enumerate(PredictionRequest.model_fields, start=1)
-        }
+        payload = _valid_payload()
 
         result = predict_price(PredictionRequest(**payload))
 
@@ -69,9 +84,7 @@ class PredictPriceTests(unittest.TestCase):
         clear_model_cache()
         self.joblib_load.reset_mock()
         with self.assertRaisesRegex(RuntimeError, "lifespan do FastAPI"):
-            predict_price(PredictionRequest(**{
-                name: 1 for name in PredictionRequest.model_fields
-            }))
+            predict_price(PredictionRequest(**_valid_payload()))
         self.joblib_load.assert_not_called()
 
 
