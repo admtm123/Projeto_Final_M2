@@ -1,3 +1,5 @@
+"""Testes unitários da inicialização, inferência e monitoramento do serviço."""
+
 import unittest
 from unittest.mock import patch
 
@@ -13,6 +15,9 @@ from api.services import (
 
 
 def _valid_payload():
+    """Monta um exemplo válido com as 23 features esperadas pelo serviço."""
+    # Começa com todas as features presentes e ajusta as que precisam de
+    # valores dentro de faixas específicas para passar pela validação Pydantic.
     payload = {name: 0 for name in PredictionRequest.model_fields}
     payload.update(
         bedrooms=3,
@@ -31,24 +36,34 @@ def _valid_payload():
 
 
 class _FakeScaler:
+    """Scaler de teste que registra a entrada recebida sem transformá-la."""
+
     n_features_in_ = len(PredictionRequest.model_fields)
     feature_names_in_ = np.array(list(PredictionRequest.model_fields))
 
     def transform(self, values):
+        # Guarda a tabela para que os testes confirmem a ordem das colunas.
         self.values = values
         return values.to_numpy()
 
 
 class _FakeModel:
+    """Modelo de teste que registra as features e retorna um preço conhecido."""
+
     n_features_in_ = len(PredictionRequest.model_fields)
 
     def predict(self, values):
         self.values = values
-        return np.array([123_456.0])
+        return np.array([123_456.789])
 
 
 class PredictPriceTests(unittest.TestCase):
+    """Testa o fluxo do serviço sem carregar os artefatos reais do disco."""
+
     def setUp(self):
+        # Garante estado limpo entre testes e simula joblib.load com objetos
+        # controlados. O serviço ainda lê os metadados para validar a versão
+        # e a ordem de features, mas modelo e scaler são substituídos.
         clear_model_cache()
         self.scaler = _FakeScaler()
         self.model = _FakeModel()
@@ -61,27 +76,34 @@ class PredictPriceTests(unittest.TestCase):
         initialize_model()
 
     def tearDown(self):
+        # Remove o mock e limpa o cache compartilhado para não afetar outros testes.
         self.loader.stop()
         clear_model_cache()
 
     def test_prediction_uses_metadata_feature_order_and_scaler(self):
+        # Confirma que a inferência transforma uma linha com as 23 features,
+        # usa a ordem do schema, arredonda o preço e informa a versão do modelo.
         payload = _valid_payload()
 
         result = predict_price(PredictionRequest(**payload))
 
-        self.assertEqual(result.preco_estimado, 123_456.0)
+        self.assertEqual(result.preco_estimado, 123_456.79)
         self.assertEqual(result.versao_modelo, "v1")
         self.assertEqual(
             list(self.scaler.values.columns),
             list(PredictionRequest.model_fields),
         )
         self.assertEqual(self.model.values.shape, (1, 23))
+        # Uma segunda previsão e uma nova inicialização não devem reler os
+        # arquivos do modelo enquanto os artefatos já estiverem em memória.
         predict_price(PredictionRequest(**payload))
         self.assertEqual(self.joblib_load.call_count, 2)
         initialize_model()
         self.assertEqual(self.joblib_load.call_count, 2)
 
     def test_prediction_before_initialization_does_not_read_artifacts(self):
+        # Sem inicialização, o serviço deve falhar explicitamente e não tentar
+        # fazer uma leitura tardia dos arquivos durante a requisição.
         clear_model_cache()
         self.joblib_load.reset_mock()
         with self.assertRaisesRegex(RuntimeError, "lifespan do FastAPI"):
@@ -89,6 +111,7 @@ class PredictPriceTests(unittest.TestCase):
         self.joblib_load.assert_not_called()
 
     def test_health_reports_artifact_residency_without_reloading(self):
+        # O health check consulta o cache atual e não deve recarregar os arquivos.
         health = get_health_status()
         self.assertEqual(health.status, "ok")
         self.assertTrue(health.service_active)
